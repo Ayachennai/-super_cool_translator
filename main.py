@@ -434,6 +434,20 @@ class EngineEditWindow(ctk.CTkToplevel):
         self.destroy()
 
 from tkinter import filedialog
+import platform
+if platform.system() == "Windows":
+    import ctypes
+    try:
+        # Attempt to load user32 to ensure it's available early if needed for DPI awareness logic
+        # This also helps to confirm ctypes is working as expected.
+        ctypes.windll.user32 
+    except AttributeError:
+        # This might happen in some restricted environments or non-standard Python builds.
+        # Log this occurrence if logging is available here, or handle appropriately.
+        print("Warning: ctypes.windll.user32 not available, multi-monitor support might be affected.")
+        # Set a flag or handle so later code doesn't assume user32 is always present
+        # For now, we'll let it proceed and fail later if GetSystemMetrics is called without user32.
+        pass
 
 class SettingsWindow(ctk.CTkToplevel):
     def __init__(self, master, settings, on_save_callback):
@@ -579,7 +593,39 @@ class ScreenshotWindow(ctk.CTkToplevel):
         super().__init__(master)
         self.master = master
         self.withdraw() # 初始隱藏視窗
-        self.attributes('-fullscreen', True)
+
+        self.virtual_screen_x = 0
+        self.virtual_screen_y = 0
+        self.virtual_screen_width = self.winfo_screenwidth() # Default to primary screen width
+        self.virtual_screen_height = self.winfo_screenheight() # Default to primary screen height
+
+        if platform.system() == "Windows":
+            try:
+                # Constants for GetSystemMetrics
+                SM_XVIRTUALSCREEN = 76
+                SM_YVIRTUALSCREEN = 77
+                SM_CXVIRTUALSCREEN = 78
+                SM_CYVIRTUALSCREEN = 79
+
+                user32 = ctypes.windll.user32
+                # DPI awareness should be set globally at app start, so GetSystemMetrics should return scaled pixels
+                self.virtual_screen_x = user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+                self.virtual_screen_y = user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+                self.virtual_screen_width = user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+                self.virtual_screen_height = user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+
+                log_message(f"Virtual screen: x={self.virtual_screen_x}, y={self.virtual_screen_y}, w={self.virtual_screen_width}, h={self.virtual_screen_height}")
+                self.overrideredirect(True) # Remove window decorations, crucial for spanning
+                self.geometry(f"{self.virtual_screen_width}x{self.virtual_screen_height}+{self.virtual_screen_x}+{self.virtual_screen_y}")
+            except Exception as e:
+                log_error(f"Error getting virtual screen metrics: {e}. Falling back to primary screen fullscreen.")
+                # Fallback to old behavior if GetSystemMetrics fails
+                self.attributes('-fullscreen', True)
+        else:
+            # Fallback for non-Windows systems
+            log_message("Non-Windows system. Using primary screen fullscreen for screenshot window.")
+            self.attributes('-fullscreen', True)
+
         self.attributes('-alpha', 0.3) # 設定半透明
         self.attributes('-topmost', True) # 保持在最上層
 
@@ -611,11 +657,25 @@ class ScreenshotWindow(ctk.CTkToplevel):
         
         x1 = min(self.start_x, end_x)
         y1 = min(self.start_y, end_y)
-        x2 = max(self.start_x, end_x)
-        y2 = max(self.start_y, end_y)
+        _x1 = min(self.start_x, end_x)
+        _y1 = min(self.start_y, end_y)
+        _x2 = max(self.start_x, end_x)
+        _y2 = max(self.start_y, end_y)
+
+        # The coordinates from canvas are relative to the ScreenshotWindow.
+        # If ScreenshotWindow is positioned at (virtual_screen_x, virtual_screen_y),
+        # then the absolute coordinates for ImageGrab.grab are:
+        # (virtual_screen_x + _x1, virtual_screen_y + _y1, ...)
+        abs_x1 = self.virtual_screen_x + _x1
+        abs_y1 = self.virtual_screen_y + _y1
+        abs_x2 = self.virtual_screen_x + _x2
+        abs_y2 = self.virtual_screen_y + _y2
+        
+        log_message(f"Relative coords: ({_x1},{_y1},{_x2},{_y2}), Virt Screen Origin: ({self.virtual_screen_x},{self.virtual_screen_y})")
+        log_message(f"Absolute coords for grab: ({abs_x1},{abs_y1},{abs_x2},{abs_y2})")
 
         self.withdraw()
-        self.master.take_screenshot((x1, y1, x2, y2))
+        self.master.take_screenshot((int(abs_x1), int(abs_y1), int(abs_x2), int(abs_y2)))
 
     def cancel_screenshot(self, event=None):
         self.withdraw()
@@ -914,7 +974,23 @@ class App(ctk.CTk):
             update_ui(self.withdraw)
             time.sleep(0.3)  # 等待視窗動畫完成
 
-            screenshot = ImageGrab.grab(bbox=bbox)
+            from PIL import __version__ as PILLOW_VERSION
+            pillow_version_tuple = tuple(map(int, PILLOW_VERSION.split('.')))
+            if pillow_version_tuple >= (9, 3, 0):
+                log_message(f"Pillow version {PILLOW_VERSION} >= 9.3.0. Using ImageGrab.grab with all_screens=True.")
+                screenshot = ImageGrab.grab(bbox=bbox, all_screens=True)
+            else:
+                log_message(f"Pillow version {PILLOW_VERSION} < 9.3.0. Using ImageGrab.grab without all_screens=True. Multi-monitor capture might be limited.")
+                screenshot = ImageGrab.grab(bbox=bbox)
+        except ImportError:
+            log_message("Pillow library not found. Cannot take screenshot.")
+            update_ui(self.status_label.configure, text="錯誤：找不到 Pillow 函式庫")
+            # Ensure main window is shown if screenshot fails critically
+            update_ui(self.deiconify)
+            return
+        except Exception as grab_e:
+            log_error(f"Error during ImageGrab.grab: {grab_e}. Falling back to basic grab.")
+            screenshot = ImageGrab.grab(bbox=bbox) # Fallback, might not work correctly for multi-monitor
             image_np = np.array(screenshot)
 
             update_ui(self.status_label.configure, text="正在辨識文字...")

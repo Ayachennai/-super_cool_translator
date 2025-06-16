@@ -54,16 +54,11 @@
 ## 開發與執行原始碼
 
 1.  **安裝依賴**：
-    - **安裝 PyTorch (含 GPU 支援 - 重要)**：
-        本應用程式使用 PyTorch 進行 OCR。為了獲得最佳效能 (GPU 加速)，強烈建議您從 PyTorch 官方網站手動安裝與您系統 CUDA 版本相容的 PyTorch。
-        請前往 [https://pytorch.org/get-started/locally/](https://pytorch.org/get-started/locally/)，選擇您的作業系統、套件管理器 (pip)、語言 (Python) 和適合您 NVIDIA 驅動程式的 CUDA 版本 (例如 CUDA 12.1 或更新版本)，然後執行該網站提供的安裝指令。
-        `requirements.txt` 中已將 `torch` 和 `torchvision` 註解掉，以避免自動安裝可能不相容的 CPU 版本。
-
-    - **安裝其他依賴**：
-        在成功安裝 PyTorch 後，您可以安裝其餘的依賴：
+    本應用程式使用 PyTorch 進行 OCR。`requirements.txt` 中已包含 `torch` 和 `torchvision`。您可以直接安裝所有依賴：
         ```bash
         pip install -r requirements.txt
         ```
+        此預設安裝將使用 CPU 版本的 PyTorch 進行 OCR。如果您的系統配備了 NVIDIA GPU 並希望嘗試 GPU 加速，您可以參考 PyTorch 官方網站 ([https://pytorch.org/get-started/locally/](https://pytorch.org/get-started/locally/)) 的說明，自行安裝與您 CUDA 環境相容的 PyTorch 版本。但請注意，本應用程式預設配置為使用 CPU。
 2.  **運行程式**：
     ```bash
     python main.py
@@ -80,27 +75,6 @@
         - 設定您偏好的快捷鍵 (預設 `Ctrl+Alt+S`)。
         - 設定 OCR 辨識語言 (用於截圖翻譯)。
         - 設定目標翻譯語言。
-
-## GPU 加速 (OCR)
-
-本應用程式使用 EasyOCR 進行光學字元辨識 (OCR)。EasyOCR 支援使用 NVIDIA GPU (透過 CUDA) 來加速處理，這可以顯著提升 OCR 的速度，尤其是在處理大量或複雜圖像時。
-
-- **自動檢測**：應用程式在初始化 OCR 引擎時，會自動檢查系統是否支援 CUDA (`torch.cuda.is_available()`)。
-- **日誌確認**：
-    - 您可以在應用程式根目錄下的 `app.log` 檔案中查看 OCR 引擎是否嘗試使用 GPU。
-    - 尋找類似 `正在使用語言 ... 初始化 EasyOCR... (GPU: True)` 或 `(GPU: False)` 的日誌記錄。
-    - `(GPU: True)` 表示已嘗試使用 GPU。
-    - `(GPU: False)` 表示未使用 GPU，將改用 CPU 進行 OCR。
-- **啟用 GPU**：
-    - 如果日誌顯示 `(GPU: False)` 但您希望啟用 GPU 加速，請確保您的系統滿足以下條件：
-        1.  擁有一張支援 CUDA 的 NVIDIA 顯示卡。
-        2.  已正確安裝與您的 PyTorch 版本相容的 NVIDIA 顯示卡驅動程式。
-        3.  已正確安裝與您的 PyTorch 版本及驅動程式相容的 CUDA Toolkit。
-        4.  已正確安裝與您的 PyTorch 版本及 CUDA Toolkit 相容的 cuDNN 函式庫。
-        5.  您安裝的 PyTorch 版本是支援 CUDA 的版本 (通常 `pip install torch torchvision torchaudio` 會自動選擇合適版本，但特定環境可能需要指定 CUDA 版本的輪子)。
-    - 本應用程式**不會**自動為您安裝 CUDA 或相關驅動程式，它僅在環境已配置好的情況下使用 GPU。
-
-如果您在設定 CUDA 環境時遇到問題，建議查閱 PyTorch 和 NVIDIA 的官方文件。
 
 ## 打包應用程式 (供開發者)
 

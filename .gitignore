@@ -33,3 +33,6 @@ __pycache__/
 /build/
 /dist/
 *.spec
+
+# Archives
+*.zip

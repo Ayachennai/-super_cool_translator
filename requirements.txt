@@ -3,8 +3,8 @@ pynput
 Pillow
 easyocr
 numpy
-# torch # Please install PyTorch with CUDA support manually from https://pytorch.org/get-started/locally/
-# torchvision # Installed alongside PyTorch
+torch
+torchvision
 translate
 pystray
 langdetect
