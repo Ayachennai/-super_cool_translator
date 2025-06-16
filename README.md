@@ -5,7 +5,7 @@
 ## 主要功能
 
 - **螢幕截圖翻譯**：
-  - 使用者可自訂快捷鍵 (預設 `Ctrl+Alt+Q`) 觸發螢幕選取。
+  - 使用者可自訂快捷鍵 (預設 `Ctrl+Alt+S`) 觸發螢幕選取。
   - 自由選取螢幕上的任何區域進行截圖。
   - 內建 OCR (光學字元辨識) 功能，自動從圖片中提取文字。
   - 支援多種 OCR 辨識語言 (例如：英文、日文、韓文、簡體中文、繁體中文等)。
@@ -39,31 +39,104 @@
 - **日誌記錄**：
   - 自動記錄應用程式的運行狀態和潛在錯誤到 `app.log` 和 `error.log` 檔案，便於問題排查。
 
-## 安裝與使用
+## 執行已打包的應用程式 (Windows)
+
+如果您不想從原始碼執行，可以下載已打包的應用程式：
+
+1.  前往本專案的 GitHub Releases 頁面。
+2.  下載最新版本的 `super_cool_translator_vx.x.x.zip` (其中 `x.x.x` 為版本號)。
+3.  解壓縮下載的 `.zip` 檔案。
+4.  進入解壓縮後的 `super_cool_translator` 資料夾。
+5.  執行 `super_cool_translator.exe`。
+
+首次執行後，建議依照下面的「設定」指引進行配置，特別是 API 金鑰。
+
+## 開發與執行原始碼
 
 1.  **安裝依賴**：
-    ```bash
-    pip install -r requirements.txt
-    ```
+    - **安裝 PyTorch (含 GPU 支援 - 重要)**：
+        本應用程式使用 PyTorch 進行 OCR。為了獲得最佳效能 (GPU 加速)，強烈建議您從 PyTorch 官方網站手動安裝與您系統 CUDA 版本相容的 PyTorch。
+        請前往 [https://pytorch.org/get-started/locally/](https://pytorch.org/get-started/locally/)，選擇您的作業系統、套件管理器 (pip)、語言 (Python) 和適合您 NVIDIA 驅動程式的 CUDA 版本 (例如 CUDA 12.1 或更新版本)，然後執行該網站提供的安裝指令。
+        `requirements.txt` 中已將 `torch` 和 `torchvision` 註解掉，以避免自動安裝可能不相容的 CPU 版本。
+
+    - **安裝其他依賴**：
+        在成功安裝 PyTorch 後，您可以安裝其餘的依賴：
+        ```bash
+        pip install -r requirements.txt
+        ```
 2.  **運行程式**：
     ```bash
     python main.py
     ```
 3.  **設定 (首次使用建議)**：
     - 程式啟動後，右鍵點擊系統匣圖示，選擇「設定」。
-    - 設定您偏好的快捷鍵、OCR 語言、目標翻譯語言。
-    - 如果您希望使用 LLM 進行翻譯，請在「LLM 引擎管理」中新增並設定您的 API 金鑰和模型 ID。
+    - **API 金鑰設定**：
+        - 如果您希望使用 LLM (如 OpenAI, Gemini, DeepSeek, Groq) 進行翻譯，您必須設定對應的 API 金鑰。
+        - 應用程式在 `settings.json` 中預設為這些服務提供了佔位符金鑰 (例如 `"YOUR_OPENAI_API_KEY_HERE"`)。
+        - 請在「設定」視窗的「LLM 引擎管理」中，選擇您要使用的引擎，點擊「編輯」，然後輸入您自己的有效 API 金鑰和模型 ID (如果適用)。
+        - **重要**：若使用非 `ollama` 引擎且 API 金鑰為空或仍為預設佔位符，翻譯請求將不會執行，並會在翻譯結果區顯示錯誤提示。
+        - `ollama` 引擎為本地部署，不需要雲端 API 金鑰，但需確保 Ollama 服務正在本機運行且已下載對應模型。
+    - **其他設定**：
+        - 設定您偏好的快捷鍵 (預設 `Ctrl+Alt+S`)。
+        - 設定 OCR 辨識語言 (用於截圖翻譯)。
+        - 設定目標翻譯語言。
+
+## GPU 加速 (OCR)
+
+本應用程式使用 EasyOCR 進行光學字元辨識 (OCR)。EasyOCR 支援使用 NVIDIA GPU (透過 CUDA) 來加速處理，這可以顯著提升 OCR 的速度，尤其是在處理大量或複雜圖像時。
+
+- **自動檢測**：應用程式在初始化 OCR 引擎時，會自動檢查系統是否支援 CUDA (`torch.cuda.is_available()`)。
+- **日誌確認**：
+    - 您可以在應用程式根目錄下的 `app.log` 檔案中查看 OCR 引擎是否嘗試使用 GPU。
+    - 尋找類似 `正在使用語言 ... 初始化 EasyOCR... (GPU: True)` 或 `(GPU: False)` 的日誌記錄。
+    - `(GPU: True)` 表示已嘗試使用 GPU。
+    - `(GPU: False)` 表示未使用 GPU，將改用 CPU 進行 OCR。
+- **啟用 GPU**：
+    - 如果日誌顯示 `(GPU: False)` 但您希望啟用 GPU 加速，請確保您的系統滿足以下條件：
+        1.  擁有一張支援 CUDA 的 NVIDIA 顯示卡。
+        2.  已正確安裝與您的 PyTorch 版本相容的 NVIDIA 顯示卡驅動程式。
+        3.  已正確安裝與您的 PyTorch 版本及驅動程式相容的 CUDA Toolkit。
+        4.  已正確安裝與您的 PyTorch 版本及 CUDA Toolkit 相容的 cuDNN 函式庫。
+        5.  您安裝的 PyTorch 版本是支援 CUDA 的版本 (通常 `pip install torch torchvision torchaudio` 會自動選擇合適版本，但特定環境可能需要指定 CUDA 版本的輪子)。
+    - 本應用程式**不會**自動為您安裝 CUDA 或相關驅動程式，它僅在環境已配置好的情況下使用 GPU。
+
+如果您在設定 CUDA 環境時遇到問題，建議查閱 PyTorch 和 NVIDIA 的官方文件。
+
+## 打包應用程式 (供開發者)
+
+如果您修改了原始碼並希望重新打包成獨立的 Windows 執行檔，可以使用 PyInstaller。
+
+1.  確保已安裝 PyInstaller：
+    ```bash
+    pip install pyinstaller
+    ```
+2.  在專案根目錄下執行以下指令：
+    ```bash
+    pyinstaller --name super_cool_translator --onedir --windowed --add-data "settings.json:." --add-data "icon.ico:." main.py
+    ```
+    - `--name super_cool_translator`: 指定輸出應用程式的名稱。
+    - `--onedir`: 將所有依賴打包到一個資料夾中 (相對於 `--onefile` 的單一執行檔，`--onedir` 模式通常啟動更快且問題較少)。
+    - `--windowed`: 執行時不顯示主控台 (命令提示字元) 視窗。
+    - `--add-data "settings.json:."`: 將 `settings.json` 檔案包含到打包後的應用程式根目錄。
+    - `--add-data "icon.ico:."`: 將 `icon.ico` 檔案包含到打包後的應用程式根目錄。
+    - `main.py`: 您的主應用程式腳本。
+
+3.  打包完成後，可執行的應用程式將位於 `dist/super_cool_translator` 資料夾內。相關的建置檔案會產生在 `build/` 資料夾，而 `.spec` 檔案則包含了 PyInstaller 的建置設定。
 
 ## 檔案結構
 
 - `main.py`: 應用程式主程式碼。
 - `requirements.txt`: Python 依賴套件列表。
 - `settings.json`: 使用者設定檔。
-- `README.md`: 本說明文件。
 - `icon.ico`: 應用程式圖示。
+- `README.md`: 本說明文件。
+- `.gitignore`: Git 版本控制忽略列表。
 - `app.log`: 應用程式運行日誌 (自動生成)。
 - `error.log`: 錯誤日誌 (自動生成)。
 - `startup_crash.log`: 啟動失敗日誌 (自動生成)。
+- `dist/`: 打包後應用程式的輸出目錄 (由 PyInstaller 生成)。
+- `build/`: PyInstaller 建置過程中產生的暫存檔案目錄 (由 PyInstaller 生成)。
+- `super_cool_translator.spec`: PyInstaller 設定檔 (由 PyInstaller 生成)。
 
 ## 注意事項
 

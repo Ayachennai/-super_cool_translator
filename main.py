@@ -22,23 +22,31 @@ from google.api_core import exceptions as google_exceptions
 from langdetect import detect, LangDetectException
 import pystray
 
+def get_application_path():
+    if getattr(sys, 'frozen', False): # PyInstaller 打包後的執行檔
+        application_path = os.path.dirname(sys.executable)
+    else: # 從 .py 原始碼執行
+        application_path = os.path.dirname(os.path.abspath(__file__))
+    return application_path
+
 # --- 常數定義 ---
-ICON_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'icon.ico')
+BASE_APP_PATH = get_application_path()
+
+ICON_FILE = os.path.join(BASE_APP_PATH, 'icon.ico')
 
 # 設定日誌
-log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'error.log')
+APP_LOG_PATH = os.path.join(BASE_APP_PATH, 'app.log')
+ERROR_LOG_PATH = os.path.join(BASE_APP_PATH, 'error.log')
 
 def log_message(message):
     """將訊息寫入日誌檔案"""
     # 使用全域日誌檔案路徑
-    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app.log')
-    with open(log_path, 'a', encoding='utf-8') as f:
+    with open(APP_LOG_PATH, 'a', encoding='utf-8') as f:
         f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {message}\n")
 
 def log_error(e):
     """記錄錯誤到獨立的錯誤日誌檔案"""
-    error_log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'error.log')
-    with open(error_log_path, 'a', encoding='utf-8') as f:
+    with open(ERROR_LOG_PATH, 'a', encoding='utf-8') as f:
         f.write(f'\n\n--- {datetime.now()} ---\n')
         f.write(f'錯誤類型: {type(e).__name__}\n')
         f.write(f'錯誤訊息: {str(e)}\n')
@@ -97,7 +105,7 @@ DEFAULT_SETTINGS = {
 }
 
 # 設定檔案路徑
-SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.json')
+SETTINGS_FILE = os.path.join(BASE_APP_PATH, 'settings.json')
 
 def load_settings():
     """載入設定，並處理舊格式遷移"""
@@ -771,6 +779,17 @@ class App(ctk.CTk):
                     error_msg = f"錯誤: 引擎 '{selected_engine_name}' 設定不完整，缺少 'provider' 資訊。"
                     log_error(f"{error_msg} Engine data: {llm_engine}") # 記錄有問題的引擎資料
                     update_ui(self.status_label.configure, text=error_msg)
+                    update_ui(self.translated_textbox.configure, state="normal")
+                    update_ui(self.translated_textbox.delete, "1.0", "end")
+                    update_ui(self.translated_textbox.insert, "1.0", error_msg)
+                    update_ui(self.translated_textbox.configure, state="disabled")
+                    return
+
+                # Check for placeholder or empty API key for non-Ollama providers
+                if provider.lower() != 'ollama' and (not api_key or "YOUR_" in api_key.upper()):
+                    error_msg = f"錯誤: {provider.upper()} API 金鑰未設定或無效。\n請前往「設定」>「LLM 引擎管理」設定有效的 API 金鑰。"
+                    log_error(f"Invalid API key for {provider.upper()}: {api_key}")
+                    update_ui(self.status_label.configure, text="API 金鑰無效")
                     update_ui(self.translated_textbox.configure, state="normal")
                     update_ui(self.translated_textbox.delete, "1.0", "end")
                     update_ui(self.translated_textbox.insert, "1.0", error_msg)

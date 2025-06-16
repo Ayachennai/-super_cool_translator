@@ -9,7 +9,7 @@
         {
             "name": "Gemini",
             "provider": "google",
-            "api_key": "YOUR_GOOGLE_API_KEY_HERE",
+            "api_key": "AIzaSyAwFEJIYqoecGR2P4Vm7BZjO-7IiIw7L2k",
             "model_id": "gemini-1.5-flash"
         },
         {
@@ -23,6 +23,6 @@
     "screenshot_to_lang": "zh-tw",
     "manual_to_lang": "en",
     "screenshot_ocr_lang": "en",
-    "background_image_path": "C:/Users/t9202/OneDrive/圖片/圖/105135620_p0_master1200.jpg",
+    "background_image_path": "",
     "background_alpha": 1.0
 }
