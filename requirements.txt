@@ -1,0 +1,15 @@
+customtkinter
+pynput
+Pillow
+easyocr
+numpy
+torch
+torchvision
+translate
+pystray
+langdetect
+google-generativeai
+openai>=1.0.0
+deepseek
+ollama>=0.1.0
+pyinstaller

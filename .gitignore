@@ -1,0 +1,10 @@
+# Log files
+*.log
+
+# Python virtual environment
+.venv/
+
+# PyInstaller
+/build/
+/dist/
+*.spec
