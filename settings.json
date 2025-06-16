@@ -1,0 +1,28 @@
+{
+    "hotkey": [
+        "ctrl",
+        "alt",
+        "s"
+    ],
+    "max_length": 10000,
+    "llm_engines": [
+        {
+            "name": "Gemini",
+            "provider": "google",
+            "api_key": "YOUR_GOOGLE_API_KEY_HERE",
+            "model_id": "gemini-1.5-flash"
+        },
+        {
+            "name": "GPT-3.5-Turbo",
+            "provider": "openai",
+            "api_key": "YOUR_OPENAI_API_KEY_HERE",
+            "model_id": "gpt-3.5-turbo"
+        }
+    ],
+    "selected_engine": "Gemini",
+    "screenshot_to_lang": "zh-tw",
+    "manual_to_lang": "en",
+    "screenshot_ocr_lang": "en",
+    "background_image_path": "C:/Users/t9202/OneDrive/圖片/圖/105135620_p0_master1200.jpg",
+    "background_alpha": 1.0
+}
