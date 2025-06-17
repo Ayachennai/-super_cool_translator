@@ -22,7 +22,7 @@
     "selected_engine": "Gemini",
     "screenshot_to_lang": "zh-tw",
     "manual_to_lang": "en",
-    "screenshot_ocr_lang": "en",
+    "screenshot_ocr_lang": "auto",
     "background_image_path": "",
     "background_alpha": 1.0
 }

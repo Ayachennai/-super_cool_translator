@@ -1,5 +1,7 @@
 print("--- Script execution started ---")
 import customtkinter as ctk
+from tkinter import messagebox
+import langdetect
 import threading
 import sys
 import time
@@ -81,6 +83,7 @@ TESSERACT_TO_EASYOCR = {
 }
 
 OCR_LANGUAGES = {
+    '自動偵測': 'auto',
     '韓文': 'ko',
     '日文': 'ja',
     '英文': 'en',
@@ -735,7 +738,13 @@ class App(ctk.CTk):
         translated_text_header_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
         translated_text_header_frame.grid(row=2, column=0, padx=5, pady=(5, 2), sticky="ew")
         translated_text_header_frame.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(translated_text_header_frame, text="翻譯結果", font=("Arial", 16, "bold")).grid(row=0, column=0, sticky="w")
+
+        left_frame = ctk.CTkFrame(translated_text_header_frame, fg_color="transparent")
+        left_frame.grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(left_frame, text="翻譯結果", font=("Arial", 16, "bold")).pack(side="left")
+        self.detected_lang_label = ctk.CTkLabel(left_frame, text="", font=("Arial", 12), text_color="gray")
+        self.detected_lang_label.pack(side="left", padx=10)
+
         self.copy_btn = ctk.CTkButton(translated_text_header_frame, text="複製", width=80, command=self.copy_translated_text)
         self.copy_btn.grid(row=0, column=1, sticky="e")
 
@@ -797,27 +806,22 @@ class App(ctk.CTk):
         self.update_idletasks()
 
         to_lang = self.settings.get('manual_to_lang', 'zh-tw')
-        threading.Thread(target=self._execute_translation, args=(original_text, to_lang), daemon=True).start()
+        # 手動翻譯不進行語言偵測，來源語言設為 'auto'
+        threading.Thread(target=self._execute_translation, args=(original_text, to_lang, 'auto'), daemon=True).start()
 
-    def _execute_translation(self, text, to_lang):
+    def _execute_translation(self, text, to_lang, from_lang='auto'):
         """在背景執行緒中執行翻譯並安全地更新 UI"""
         def update_ui(func, *args, **kwargs):
             if self.winfo_exists():
                 self.after(0, lambda: func(*args, **kwargs))
 
         try:
-            from_lang = 'auto'
-            try:
-                if text:
-                    from_lang = detect(text[:200])
-            except LangDetectException:
-                log_message("無法偵測語言，將使用 'auto'")
-
             selected_engine_name = self.settings.get('selected_engine', 'Default')
             
             if selected_engine_name == 'Default':
                 # 使用內建的 translate 函式庫
                 update_ui(self.status_label.configure, text=f"正在使用預設引擎翻譯...")
+                # from_lang 參數現在由函式呼叫端傳入
                 translator = TransEngine(to_lang=to_lang, from_lang=from_lang)
                 translated_text = translator.translate(text)
             else:
@@ -923,8 +927,20 @@ class App(ctk.CTk):
 
         try:
             safe_update_status("正在初始化 OCR 引擎...")
-            lang_code = self.settings.get('screenshot_ocr_lang', 'ko')
-            lang_list = [lang_code]
+            lang_code = self.settings.get('screenshot_ocr_lang', 'auto')
+
+            if lang_code == 'auto':
+                # 對於自動偵測，載入所有支援的語言。
+                lang_list = [code for code in OCR_LANGUAGES.values() if code != 'auto']
+                log_message(f"OCR 自動偵測模式，載入語言: {lang_list}")
+            elif lang_code == 'ja':
+                # 如果選擇的 OCR 語言是日文 ('ja')，則同時加入英文 ('en') 以增強對混合文本的辨識能力
+                lang_list = ['ja', 'en']
+                log_message("OCR 日文模式，同時載入英文以增強辨識。")
+            else:
+                lang_list = [lang_code]
+                log_message(f"OCR 單一語言模式，載入語言: {lang_code}")
+
             use_gpu = torch.cuda.is_available()
             log_message(f"正在使用語言 '{lang_list}' 初始化 EasyOCR... (GPU: {use_gpu})")
             self.ocr_reader = easyocr.Reader(lang_list, gpu=use_gpu)
@@ -982,41 +998,61 @@ class App(ctk.CTk):
             else:
                 log_message(f"Pillow version {PILLOW_VERSION} < 9.3.0. Using ImageGrab.grab without all_screens=True. Multi-monitor capture might be limited.")
                 screenshot = ImageGrab.grab(bbox=bbox)
-        except ImportError:
-            log_message("Pillow library not found. Cannot take screenshot.")
-            update_ui(self.status_label.configure, text="錯誤：找不到 Pillow 函式庫")
-            # Ensure main window is shown if screenshot fails critically
-            update_ui(self.deiconify)
-            return
-        except Exception as grab_e:
-            log_error(f"Error during ImageGrab.grab: {grab_e}. Falling back to basic grab.")
-            screenshot = ImageGrab.grab(bbox=bbox) # Fallback, might not work correctly for multi-monitor
-            image_np = np.array(screenshot)
 
-            update_ui(self.status_label.configure, text="正在辨識文字...")
+            image_np = np.array(screenshot)
 
             if self.ocr_reader is None:
                 update_ui(self.status_label.configure, text="錯誤: OCR 引擎未初始化")
+                log_message("OCR 引擎未初始化，中止辨識流程。")
                 return
 
+            log_message("準備執行 OCR readtext...")
             results = self.ocr_reader.readtext(image_np)
-            original_text = ' '.join([item[1] for item in results]).strip()
+            log_message("OCR readtext 執行完畢。")
+            
+            if not results:
+                update_ui(self.status_label.configure, text="未識別到文字")
+                log_message("OCR 結果為空。")
+                update_ui(self.deiconify)
+                return
 
-            # 將原文更新到 UI
+            original_text = "\n".join([res[1] for res in results])
+            log_message(f"OCR 辨識出的文字: {original_text[:100]}...")
+            
+            # --- 語言偵測 --- #
+            ocr_lang_setting = self.settings.get('screenshot_ocr_lang', 'auto')
+            detected_lang_code = None
+            detected_lang_name = ""
+
+            if ocr_lang_setting == 'auto' and original_text.strip():
+                try:
+                    detected_lang_code = langdetect.detect(original_text)
+                    detected_lang_name = REVERSE_LANGUAGES.get(detected_lang_code, f"未知 ({detected_lang_code})")
+                    log_message(f"自動偵測到語言: {detected_lang_name} ({detected_lang_code})")
+                    update_ui(self.detected_lang_label.configure, text=f"(偵測到: {detected_lang_name})")
+                except Exception as e:
+                    log_error(f"語言偵測失敗: {e}")
+                    update_ui(self.detected_lang_label.configure, text="(偵測失敗)")
+            else:
+                update_ui(self.detected_lang_label.configure, text="") # 清除上一次的標籤
+
             update_ui(self.original_textbox.delete, "1.0", "end")
             update_ui(self.original_textbox.insert, "1.0", original_text)
+            update_ui(self.status_label.configure, text="正在翻譯...")
+            update_ui(self.deiconify)
 
-            if not original_text:
-                update_ui(self.status_label.configure, text="OCR 未辨識到任何文字")
-                return
-
-            # 取得目標語言並執行翻譯
             to_lang = self.settings.get('screenshot_to_lang', 'en')
-            # 直接呼叫翻譯執行函式，避免重複的 UI 更新邏輯
-            self._execute_translation(original_text, to_lang)
+            
+            # 如果自動偵測成功，將其作為來源語言傳遞給翻譯函式
+            # 注意: _execute_translation 需要被修改以接受 from_lang 參數
+            from_lang = detected_lang_code if detected_lang_code else 'auto'
+            self._execute_translation(original_text, to_lang, from_lang=from_lang)
 
+        except ImportError:
+            log_message("Pillow library not found. Cannot take screenshot.")
+            update_ui(self.status_label.configure, text="錯誤：找不到 Pillow 函式庫")
         except Exception as e:
-            log_error(e)
+            log_error(f"Error in _execute_ocr_and_translation: {e}")
             error_message = f"OCR 或翻譯時發生錯誤: {str(e)[:200]}"
             update_ui(self.status_label.configure, text=error_message)
             update_ui(self.original_textbox.delete, "1.0", "end")
@@ -1026,7 +1062,6 @@ class App(ctk.CTk):
             update_ui(self.deiconify)
 
     def start_hotkey_listener(self):
-        """在獨立執行緒中運行的快捷鍵監聽器"""
         try:
             special_keys = {'ctrl', 'alt', 'shift', 'win', 'cmd'}
             hotkey_parts = []
