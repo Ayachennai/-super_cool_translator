@@ -1,4 +1,5 @@
 print("--- Script execution started ---")
+import tkinter as tk
 import customtkinter as ctk
 from tkinter import messagebox
 import langdetect
@@ -354,7 +355,7 @@ class EngineEditWindow(ctk.CTkToplevel):
     def __init__(self, master, engine_data=None, on_save=None):
         super().__init__(master)
         self.title("新增/編輯 LLM 引擎")
-        self.geometry("400x400")
+        self.geometry("400x450") # 增加高度以顯示所有元件
         self.transient(master)
         self.grab_set()
 
@@ -373,7 +374,8 @@ class EngineEditWindow(ctk.CTkToplevel):
         self.provider_menu = ctk.CTkOptionMenu(
             self, 
             variable=self.provider_var,
-            values=['openai', 'deepseek', 'ollama', 'google', 'groq']
+            values=['openai', 'deepseek', 'ollama', 'google', 'groq'],
+            command=lambda _: self.set_default_model_id()
         )
         self.provider_menu.pack(pady=5, padx=20, fill="x")
 
@@ -389,9 +391,8 @@ class EngineEditWindow(ctk.CTkToplevel):
         self.model_id_entry.pack(pady=5, padx=20, fill="x")
         self.model_id_entry.insert(0, self.engine_data.get('model_id', ''))
         
-        # 根據提供者設置預設模型 ID
+        # 首次載入時，根據提供者設置預設模型 ID
         self.set_default_model_id()
-        self.provider_menu.configure(command=lambda _: self.set_default_model_id())
 
         # 保存按鈕
         self.save_btn = ctk.CTkButton(self, text="儲存", command=self.save)
@@ -404,13 +405,13 @@ class EngineEditWindow(ctk.CTkToplevel):
             'openai': 'gpt-3.5-turbo',
             'deepseek': 'deepseek-chat',
             'ollama': 'llama3',  # 假設用戶已經下載了 llama3 模型
-            'google': 'gemini-pro',
+            'google': 'gemini-1.5-flash',  # 預設 Google 模型 ID
             'groq': 'mixtral-8x7b-32768'
         }
         
         current_text = self.model_id_entry.get()
         if not current_text or current_text in defaults.values():
-            self.model_id_entry.delete(0, 'end')
+            self.model_id_entry.delete(0, tk.END)
             self.model_id_entry.insert(0, defaults.get(provider, ''))
 
     def save(self):
@@ -930,16 +931,18 @@ class App(ctk.CTk):
             lang_code = self.settings.get('screenshot_ocr_lang', 'auto')
 
             if lang_code == 'auto':
-                # 對於自動偵測，載入所有支援的語言。
-                lang_list = [code for code in OCR_LANGUAGES.values() if code != 'auto']
-                log_message(f"OCR 自動偵測模式，載入語言: {lang_list}")
-            elif lang_code == 'ja':
-                # 如果選擇的 OCR 語言是日文 ('ja')，則同時加入英文 ('en') 以增強對混合文本的辨識能力
+                # "自動" 模式預設載入日文和英文，以最佳化混合文本的辨識。
+                # 如需辨識韓文或中文，請在設定中手動選擇。
                 lang_list = ['ja', 'en']
-                log_message("OCR 日文模式，同時載入英文以增強辨識。")
+                log_message("OCR 自動偵測模式，載入日文與英文。")
+            elif lang_code == 'en':
+                # 對於純英文，只載入英文模型。
+                lang_list = ['en']
+                log_message("OCR 英文模式。")
             else:
-                lang_list = [lang_code]
-                log_message(f"OCR 單一語言模式，載入語言: {lang_code}")
+                # 對於所有其他語言，都自動加入英文以支援混合文本辨識。
+                lang_list = [lang_code, 'en']
+                log_message(f"OCR {lang_code} 模式，同時載入英文以增強辨識。")
 
             use_gpu = torch.cuda.is_available()
             log_message(f"正在使用語言 '{lang_list}' 初始化 EasyOCR... (GPU: {use_gpu})")
@@ -950,6 +953,7 @@ class App(ctk.CTk):
             log_error(e)
             error_msg = f"OCR 引擎初始化失敗: {str(e)[:100]}"
             safe_update_status(error_msg)
+            self.ocr_reader = None # 初始化失敗時，將 ocr_reader 設為 None
 
     def start_screenshot_flow(self):
         """啟動截圖流程"""
@@ -1004,6 +1008,7 @@ class App(ctk.CTk):
             if self.ocr_reader is None:
                 update_ui(self.status_label.configure, text="錯誤: OCR 引擎未初始化")
                 log_message("OCR 引擎未初始化，中止辨識流程。")
+                update_ui(self.deiconify) # 恢復主視窗
                 return
 
             log_message("準備執行 OCR readtext...")
